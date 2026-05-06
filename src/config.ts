@@ -4,6 +4,15 @@ import yaml from 'js-yaml';
 import { z } from 'zod';
 import { configPath } from './paths.js';
 
+const NagSchema = z
+  .object({
+    enabled: z.boolean().default(true),
+    delay_minutes: z.number().int().min(1).max(480).default(60),
+    interval_minutes: z.number().int().min(1).max(120).default(10),
+    sound: z.string().default('Glass'),
+  })
+  .default({ enabled: true, delay_minutes: 60, interval_minutes: 10, sound: 'Glass' });
+
 const ConfigSchema = z.object({
   username: z.string().min(1, 'username must be set — run `siesta login` to register your account'),
   presence_url: z
@@ -13,6 +22,7 @@ const ConfigSchema = z.object({
   login_url: z.string().url().default('https://your-intranet.example/login/auth'),
   headless: z.boolean().default(true),
   timeout_ms: z.number().int().min(1000).max(120000).default(20000),
+  nag: NagSchema,
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -46,4 +56,10 @@ login_url: https://your-intranet.example/login/auth
 
 headless: true                    # flip to false (or pass --headed) when debugging
 timeout_ms: 20000
+
+nag:                              # Mittagspausen-Erinnerung: nach \`mahlzeit\` startet ein Hintergrund-Loop
+  enabled: true
+  delay_minutes: 60               # nach wie vielen Minuten Pause der erste Nag kommt
+  interval_minutes: 10            # Takt der Folge-Nags, bis du wieder \`anwesend\` bist
+  sound: Glass                    # macOS notification sound (z. B. Glass, Pop, Submarine, Hero, "")
 `;

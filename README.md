@@ -40,9 +40,38 @@ All four commands are equivalent to:
 |---|---|---|
 | `moin` | `siesta in` | clock in (anwesend) |
 | `ciao` | `siesta out` | clock out (abwesend) |
-| `mahlzeit` | `siesta out` | clock out (abwesend) — Mittag-flavoured |
+| `mahlzeit` | `siesta out --nag` | clock out (abwesend) — Mittag-flavoured, starts nag loop |
 
 Double-stamp guard is built in: if you're already `anwesend` and run `moin`, it noops with a friendly message. Pass `--force` to click anyway.
+
+## Lunch nag
+
+When you stamp out via `mahlzeit`, siesta forks a detached background process that:
+
+1. Sleeps for `nag.delay_minutes` (default: 60).
+2. Then every `nag.interval_minutes` (default: 10), checks your status.
+3. While you're still `abwesend`, fires a macOS notification reminding you to clock back in.
+4. As soon as you're `anwesend` again — via `moin`, the UI, or any other path — the loop exits cleanly.
+
+The loop is **always** killed when you `moin`/`siesta in`, so you never get a nag for a pause that's already over.
+
+```bash
+siesta nag           # start the loop manually
+siesta nag --status  # is one running?
+siesta nag --stop    # kill it
+```
+
+Tune cadence in `~/.config/siesta/config.yaml`:
+
+```yaml
+nag:
+  enabled: true
+  delay_minutes: 60
+  interval_minutes: 10
+  sound: Glass         # any name from /System/Library/Sounds, or "" for silent
+```
+
+Logs from the background loop go to `~/Library/Application Support/siesta/nag.log`.
 
 ## How it works
 

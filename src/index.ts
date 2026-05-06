@@ -7,6 +7,7 @@ import { loadConfig, writeSampleConfig } from './config.js';
 import { deletePassword, getPassword, setPassword } from './credentials.js';
 import { clearState, openSession } from './browser.js';
 import { readStatus, stamp, type Presence, type StampResult } from './stamp.js';
+import { readNagPid, runNagLoop, startNag, stopNag } from './nag.js';
 import { log } from './log.js';
 
 const ALIAS_TO_TARGET: Record<string, Presence> = {
@@ -17,8 +18,16 @@ const ALIAS_TO_TARGET: Record<string, Presence> = {
 
 async function main(): Promise<void> {
   const invokedAs = basename(process.argv[1] ?? '').replace(/\.[^.]+$/, '');
+
+  // Detached child entry — kept hidden from user-facing CLI
+  if (process.argv[2] === '__nag-loop' && process.env.SIESTA_NAG_CHILD === '1') {
+    const { config } = loadConfig();
+    await runNagLoop(config);
+    return;
+  }
+
   if (invokedAs in ALIAS_TO_TARGET) {
-    await runStamp(ALIAS_TO_TARGET[invokedAs], parseStampOpts(process.argv.slice(2)));
+    await runStamp(ALIAS_TO_TARGET[invokedAs], parseStampOpts(process.argv.slice(2)), invokedAs);
     return;
   }
 
@@ -30,14 +39,15 @@ async function main(): Promise<void> {
     .description('clock in (anwesend)')
     .option('--headed', 'show the browser window (debugging)')
     .option('--force', 'click even if already in the target state')
-    .action(async (opts) => runStamp('anwesend', opts));
+    .action(async (opts) => runStamp('anwesend', opts, 'in'));
 
   program
     .command('out')
     .description('clock out (abwesend)')
     .option('--headed', 'show the browser window')
     .option('--force', 'click even if already in the target state')
-    .action(async (opts) => runStamp('abwesend', opts));
+    .option('--nag', 'start lunch-nag loop after stamping out')
+    .action(async (opts) => runStamp('abwesend', opts, opts.nag ? 'mahlzeit' : 'out'));
 
   program
     .command('status')
@@ -54,6 +64,13 @@ async function main(): Promise<void> {
     .command('logout')
     .description('remove the stored password and clear the browser session')
     .action(async () => runLogout());
+
+  program
+    .command('nag')
+    .description('manually start (or stop) the lunch-nag loop')
+    .option('--stop', 'stop a running nag loop')
+    .option('--status', 'show whether a nag loop is currently running')
+    .action((opts) => runNagCmd(opts));
 
   program
     .command('config')
@@ -83,11 +100,11 @@ function parseStampOpts(argv: string[]): StampOpts {
   return { headed: argv.includes('--headed'), force: argv.includes('--force') };
 }
 
-async function runStamp(target: Presence, opts: StampOpts): Promise<void> {
+async function runStamp(target: Presence, opts: StampOpts, invokedAs: string): Promise<void> {
   const { config } = loadConfig();
   const session = await openSession(config, { headed: opts.headed });
+  let result: StampResult;
   try {
-    let result: StampResult;
     if (opts.force) {
       const before = await readStatus(session.page, config);
       const buttonName = target === 'anwesend' ? 'btnPresent' : 'btnAbsent';
@@ -106,6 +123,24 @@ async function runStamp(target: Presence, opts: StampOpts): Promise<void> {
     }
   } finally {
     await session.close();
+  }
+
+  // Stamp-in always cancels any running nag.
+  if (target === 'anwesend') {
+    const stopped = stopNag();
+    if (stopped.stopped) console.log('  (Nag-Loop gestoppt)');
+  }
+
+  // Auto-start nag after `mahlzeit` (and `siesta out --nag`).
+  if (target === 'abwesend' && invokedAs === 'mahlzeit' && config.nag.enabled) {
+    const { started, pid } = startNag();
+    if (started) {
+      console.log(
+        `  (Nag-Loop läuft im Hintergrund, pid ${pid} — erste Erinnerung in ${config.nag.delay_minutes} min, danach alle ${config.nag.interval_minutes} min)`,
+      );
+    } else {
+      console.log(`  (Nag-Loop lief schon, pid ${pid})`);
+    }
   }
 }
 
@@ -154,9 +189,34 @@ async function runLogin(): Promise<void> {
 
 async function runLogout(): Promise<void> {
   const { config } = loadConfig();
+  stopNag();
   const removed = await deletePassword(config.username);
   await clearState();
   console.log(removed ? 'Password removed and session cleared.' : 'No password was stored. Session cleared.');
+}
+
+function runNagCmd(opts: { stop?: boolean; status?: boolean }): void {
+  if (opts.stop) {
+    const { stopped, pid } = stopNag();
+    console.log(stopped ? `Stopped nag loop (pid ${pid}).` : 'No nag loop was running.');
+    return;
+  }
+  if (opts.status) {
+    const pid = readNagPid();
+    if (pid) {
+      try {
+        process.kill(pid, 0);
+        console.log(`Nag loop is running (pid ${pid}).`);
+      } catch {
+        console.log(`Stale pid file for ${pid}; no live process. Run \`siesta nag --stop\` to clean up.`);
+      }
+    } else {
+      console.log('No nag loop running.');
+    }
+    return;
+  }
+  const { started, pid } = startNag();
+  console.log(started ? `Nag loop started (pid ${pid}).` : `Nag loop was already running (pid ${pid}).`);
 }
 
 main().catch((err) => {

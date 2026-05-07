@@ -9,11 +9,13 @@ import { clearState, openSession } from './browser.js';
 import { readStatus, stamp, type Presence, type StampResult } from './stamp.js';
 import { readNagPid, runNagLoop, startNag, stopNag } from './nag.js';
 import { clearLastStamp, readLastStamp, writeLastStamp } from './lastStamp.js';
+import { appendStamp, clearStampLog, formatDuration, formatHm, summarizeToday } from './workLog.js';
 import { log } from './log.js';
 
 const MIN_ABSENCE_MS = 60_000;
 const STAMP_HOUR_MIN = 6;
 const STAMP_HOUR_MAX_EXCLUSIVE = 21;
+const MAX_WORK_MS = (10 * 60 + 15) * 60_000;
 
 const ALIAS_TO_TARGET: Record<string, Presence> = {
   moin: 'anwesend',
@@ -69,6 +71,11 @@ async function main(): Promise<void> {
     .command('logout')
     .description('remove the stored password and clear the browser session')
     .action(async () => runLogout());
+
+  program
+    .command('worked')
+    .description('show how much you have worked today (offline — no browser roundtrip)')
+    .action(() => runWorked());
 
   program
     .command('nag')
@@ -134,7 +141,12 @@ async function runStamp(target: Presence, opts: StampOpts, invokedAs: string): P
       console.log(`Schon ${formatPresence(result.before)}. Nichts zu tun.`);
     } else {
       console.log(`${formatPresence(result.before)} → ${formatPresence(result.after)} ✓`);
-      writeLastStamp({ presence: result.after === 'unknown' ? target : result.after, ts: Date.now() });
+      const settledTs = Date.now();
+      const settled = result.after === 'unknown' ? target : result.after;
+      writeLastStamp({ presence: settled, ts: settledTs });
+      appendStamp(settled, settledTs);
+      const summary = summarizeToday(settledTs);
+      console.log(`  Heute gearbeitet: ${formatDuration(summary.totalMs)}`);
     }
   } finally {
     await session.close();
@@ -177,6 +189,11 @@ function checkWriteAllowed(target: Presence): string | null {
         return `⏳ Abwesenheit war erst vor ${Math.floor(elapsed / 1000)}s — Pausen müssen mindestens 1 Minute dauern. Warte noch ${remaining}s.`;
       }
     }
+
+    const worked = summarizeToday().totalMs;
+    if (worked >= MAX_WORK_MS) {
+      return `🛑 Heute schon ${formatDuration(worked)} gearbeitet — Tageshöchstgrenze (10h 15min) erreicht. Kein erneutes Einstempeln möglich.`;
+    }
   }
 
   return null;
@@ -196,6 +213,28 @@ function formatPresence(p: Presence | 'unknown'): string {
       return wrap('33', `🌙 abwesend`);
     default:
       return wrap('90', `❓ unknown`);
+  }
+}
+
+function runWorked(): void {
+  const summary = summarizeToday();
+  if (summary.firstTs === null) {
+    console.log('Heute noch nicht gestempelt.');
+    return;
+  }
+
+  const total = formatDuration(summary.totalMs);
+  const remaining = MAX_WORK_MS - summary.totalMs;
+  const remainingStr = remaining > 0 ? formatDuration(remaining) : '0min';
+
+  if (summary.openSinceTs !== null) {
+    const since = formatHm(summary.openSinceTs);
+    console.log(`✅ anwesend seit ${since}`);
+    console.log(`Heute gearbeitet: ${total} (${summary.pairs > 0 ? `${summary.pairs} Pause${summary.pairs === 1 ? '' : 'n'} davor, ` : ''}noch ${remainingStr} bis 10h 15min)`);
+  } else {
+    const lastOut = summary.lastAbwesendTs !== null ? ` (zuletzt abgemeldet ${formatHm(summary.lastAbwesendTs)})` : '';
+    console.log(`🌙 abwesend${lastOut}`);
+    console.log(`Heute gearbeitet: ${total} (noch ${remainingStr} bis 10h 15min)`);
   }
 }
 
@@ -248,6 +287,7 @@ async function runLogout(): Promise<void> {
   const removed = await deletePassword(config.username);
   await clearState();
   clearLastStamp();
+  clearStampLog();
   console.log(removed ? 'Password removed and session cleared.' : 'No password was stored. Session cleared.');
 }
 

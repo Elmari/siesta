@@ -44,9 +44,16 @@ All four commands are equivalent to:
 
 Double-stamp guard is built in: if you're already `anwesend` and run `moin`, it noops with a friendly message.
 
-Stamping is locked between **21:00 and 06:00** (no late-night accidents) and refuses to flip you back to `anwesend` if you went `abwesend` less than a minute ago (catches accidental double-stamps and breaks shorter than the configured minimum).
+Stamping is locked between **21:00 and 06:00** (no late-night accidents) and refuses to flip you back to `anwesend` if you went `abwesend` less than a minute ago (catches accidental double-stamps and breaks shorter than the configured minimum). Once you have already worked **10h 15min** today, `moin` is also blocked — to keep you from sliding past the daily cap.
 
 Pass `--dry-run` (e.g. `moin --dry-run`) to walk through login + selector resolution without actually clicking — handy after upstream UI changes.
+
+`siesta worked` shows how long you have worked today, derived from the local stamp log (`~/Library/Application Support/siesta/stamps.jsonl`) — no browser roundtrip:
+
+```
+✅ anwesend seit 09:42
+Heute gearbeitet: 4h 18min (1 Pause davor, noch 5h 57min bis 10h 15min)
+```
 
 ## Lunch nag
 

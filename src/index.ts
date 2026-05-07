@@ -44,7 +44,7 @@ async function main(): Promise<void> {
   }
 
   const program = new Command();
-  program.name('siesta').description('Stamp presence at intranet without the UI dance').version('0.1.0');
+  program.name('siesta').description('Stamp presence at your intranet without the UI dance').version('0.1.0');
 
   program
     .command('in')

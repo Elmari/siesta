@@ -1,6 +1,6 @@
 # siesta
 
-Stamp yourself in/out at intranet without ever opening the presence page. `moin` to clock in, `mahlzeit` for lunch, `ciao` for end of day. Skips the OIDC dance and a couple of recurring foot-guns. macOS only.
+Stamp yourself in/out at your intranet's presence page without ever opening it. `moin` to clock in, `mahlzeit` for lunch, `ciao` for end of day. Skips the OIDC dance and a couple of recurring foot-guns. macOS only.
 
 ## Install
 
@@ -37,7 +37,7 @@ siesta worked  # how long have I worked today?
 | `ciao` | `siesta out` | clock out (abwesend) |
 | `mahlzeit` | `siesta out --nag` | clock out + start lunch reminder loop |
 
-`anwesend` / `abwesend` are the literal intranet states, so they appear verbatim in the output.
+`anwesend` / `abwesend` are the literal states the configured server returns, so they appear verbatim in the output.
 
 Flags on stamp commands:
 
@@ -139,7 +139,7 @@ All under `~/Library/Application Support/siesta/`:
 ### Stamp flow
 
 1. Launches headless Chromium with `state.json` cookies.
-2. Navigates to the presence URL.
+2. Navigates to the configured `presence_url`.
 3. Races `#status` (already in) vs. `input[name="username"]` (login form). If login wins, fills credentials and submits; the race re-runs once. A second login result throws a clear error instead of a silent timeout.
 4. Reads `#status` and reconciles local state — if the server disagrees with `last-stamp.json`, appends a synthetic event with `ts = now` so UI-side stamps are recorded (approximate to the minute).
 5. Clicks the appropriate button (or no-ops) and persists cookies.

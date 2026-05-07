@@ -13,15 +13,34 @@ const NagSchema = z
   })
   .default({ enabled: true, delay_minutes: 60, interval_minutes: 10, sound: 'Glass' });
 
+const SelectorsSchema = z
+  .object({
+    status: z.string().default('#status'),
+    login_username: z.string().default('input[name="username"]'),
+    login_password: z.string().default('input[name="password"]'),
+    login_submit: z.string().default('#login-button'),
+    btn_present: z.string().default('[name="btnPresent"]'),
+    btn_absent: z.string().default('[name="btnAbsent"]'),
+  })
+  .default({
+    status: '#status',
+    login_username: 'input[name="username"]',
+    login_password: 'input[name="password"]',
+    login_submit: '#login-button',
+    btn_present: '[name="btnPresent"]',
+    btn_absent: '[name="btnAbsent"]',
+  });
+
 const ConfigSchema = z.object({
   username: z.string().min(1, 'username must be set — run `siesta login` to register your account'),
   presence_url: z
     .string()
     .url()
-    .default('https://your-intranet.example/presence/PresenceController?actionName=presence&actionParm='),
-  login_url: z.string().url().default('https://your-intranet.example/login/auth'),
+    .default('https://your-intranet.example/presence'),
+  login_url: z.string().url().default('https://your-intranet.example/login'),
   headless: z.boolean().default(true),
   timeout_ms: z.number().int().min(1000).max(120000).default(20000),
+  selectors: SelectorsSchema,
   nag: NagSchema,
 });
 
@@ -49,13 +68,24 @@ export function writeSampleConfig(): string {
 }
 
 const SAMPLE_CONFIG = `# siesta config
-username: your.username      # intranet username — passwords live in macOS Keychain (run \`siesta login\`)
+# Adapt the URLs and selectors to your intranet's presence/time-tracking system.
+username: your.username           # passwords live in macOS Keychain (run \`siesta login\`)
 
-presence_url: https://your-intranet.example/presence/PresenceController?actionName=presence&actionParm=
-login_url: https://your-intranet.example/login/auth
+presence_url: https://your-intranet.example/presence
+login_url: https://your-intranet.example/login
 
 headless: true                    # flip to false (or pass --headed) when debugging
 timeout_ms: 20000
+
+# Selectors used to read presence and click the in/out buttons. Override these
+# to match the actual login + presence page of your target system.
+selectors:
+  status: '#status'
+  login_username: 'input[name="username"]'
+  login_password: 'input[name="password"]'
+  login_submit: '#login-button'
+  btn_present: '[name="btnPresent"]'
+  btn_absent: '[name="btnAbsent"]'
 
 nag:                              # Mittagspausen-Erinnerung: nach \`mahlzeit\` startet ein Hintergrund-Loop
   enabled: true

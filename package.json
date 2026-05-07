@@ -1,7 +1,7 @@
 {
   "name": "siesta",
   "version": "0.1.0",
-  "description": "CLI presence-stamping for intranet — moin, ciao, mahlzeit.",
+  "description": "CLI presence-stamping for intranet time-tracking — moin, ciao, mahlzeit.",
   "type": "module",
   "bin": {
     "siesta": "dist/index.js",

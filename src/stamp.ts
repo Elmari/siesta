@@ -14,7 +14,7 @@ export interface StampResult {
 
 export async function readStatus(page: Page, config: Config): Promise<Presence | 'unknown'> {
   await ensureOnPresencePage(page, config);
-  const text = (await page.locator('#status').first().textContent({ timeout: config.timeout_ms })) ?? '';
+  const text = (await page.locator(config.selectors.status).first().textContent({ timeout: config.timeout_ms })) ?? '';
   const observed = parsePresence(text);
   if (reconcileFromServer(observed)) {
     log.info(`siesta: reconciled local state from server — observed '${observed}'`);
@@ -30,7 +30,7 @@ export async function stamp(
 ): Promise<StampResult> {
   await ensureOnPresencePage(page, config);
 
-  const beforeText = (await page.locator('#status').first().textContent({ timeout: config.timeout_ms })) ?? '';
+  const beforeText = (await page.locator(config.selectors.status).first().textContent({ timeout: config.timeout_ms })) ?? '';
   const before = parsePresence(beforeText);
   if (reconcileFromServer(before)) {
     log.info(`siesta: reconciled local state from server — observed '${before}' before stamp`);
@@ -41,29 +41,29 @@ export async function stamp(
     return { before, after: before, changed: false };
   }
 
-  const buttonName = target === 'anwesend' ? 'btnPresent' : 'btnAbsent';
+  const buttonSelector = target === 'anwesend' ? config.selectors.btn_present : config.selectors.btn_absent;
 
   if (opts.dryRun) {
     // Dry-run: ensure the button is actually attached/visible so we'd know if a selector broke,
     // but don't click it.
-    await page.locator(`[name="${buttonName}"]`).first().waitFor({ state: 'visible', timeout: config.timeout_ms });
-    log.info(`siesta: [dry-run] would click [name="${buttonName}"] — skipping`);
+    await page.locator(buttonSelector).first().waitFor({ state: 'visible', timeout: config.timeout_ms });
+    log.info(`siesta: [dry-run] would click ${buttonSelector} — skipping`);
     return { before, after: before, changed: false };
   }
 
-  log.debug(`siesta: clicking [name="${buttonName}"]`);
-  await page.locator(`[name="${buttonName}"]`).first().click();
+  log.debug(`siesta: clicking ${buttonSelector}`);
+  await page.locator(buttonSelector).first().click();
 
   await page.waitForFunction(
-    (expected: string) => {
-      const el = document.getElementById('status');
+    ({ statusSel, expected }: { statusSel: string; expected: string }) => {
+      const el = document.querySelector(statusSel);
       return !!el && el.textContent?.trim().toLowerCase() === expected;
     },
-    target,
+    { statusSel: config.selectors.status, expected: target },
     { timeout: config.timeout_ms },
   );
 
-  const afterText = (await page.locator('#status').first().textContent({ timeout: config.timeout_ms })) ?? '';
+  const afterText = (await page.locator(config.selectors.status).first().textContent({ timeout: config.timeout_ms })) ?? '';
   const after = parsePresence(afterText);
   return { before, after, changed: before !== after };
 }
@@ -92,12 +92,12 @@ async function ensureOnPresencePage(page: Page, config: Config): Promise<void> {
 
 async function waitForLoginOrStatus(page: Page, config: Config): Promise<'status' | 'login'> {
   const status = page
-    .locator('#status')
+    .locator(config.selectors.status)
     .first()
     .waitFor({ state: 'visible', timeout: config.timeout_ms })
     .then(() => 'status' as const);
   const login = page
-    .locator('input[name="username"]')
+    .locator(config.selectors.login_username)
     .first()
     .waitFor({ state: 'visible', timeout: config.timeout_ms })
     .then(() => 'login' as const);
@@ -118,9 +118,9 @@ async function performLogin(page: Page, config: Config): Promise<void> {
     );
   }
 
-  await page.locator('input[name="username"]').fill(config.username);
-  await page.locator('input[name="password"]').fill(password);
-  await page.locator('#login-button').click();
+  await page.locator(config.selectors.login_username).fill(config.username);
+  await page.locator(config.selectors.login_password).fill(password);
+  await page.locator(config.selectors.login_submit).click();
 }
 
 function parsePresence(text: string): Presence | 'unknown' {

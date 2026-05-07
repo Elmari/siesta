@@ -49,7 +49,7 @@ export function writeSampleConfig(): string {
 }
 
 const SAMPLE_CONFIG = `# siesta config
-username: your.username        # intranet username — passwords live in macOS Keychain (run \`siesta login\`)
+username: your.username      # intranet username — passwords live in macOS Keychain (run \`siesta login\`)
 
 presence_url: https://your-intranet.example/presence/PresenceController?actionName=presence&actionParm=
 login_url: https://your-intranet.example/login/auth

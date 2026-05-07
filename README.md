@@ -50,6 +50,8 @@ Pass `--dry-run` (e.g. `moin --dry-run`) to walk through login + selector resolu
 
 When you stamp in (`moin`), siesta also forks a **cap-nag** in the background that fires a notification 15 min and 5 min before the 10h 15min mark, then again at the cap and every 5 min after — until you stamp out (or the local last-stamp says you're abwesend). Logs go to `~/Library/Application Support/siesta/cap-nag.log`. Stamping out kills it; `siesta logout` does too.
 
+Before each warning the cap-nag opens a fresh headless session and reads the server status — so if you clocked out via the UI, the loop sees that and exits without nagging. Every server read also reconciles the local stamp log (`stamps.jsonl` + `last-stamp.json`): UI-side flips show up in `siesta worked` and the 10h 15min cap-check after the next siesta invocation that touches the page.
+
 `siesta worked` shows how long you have worked today, derived from the local stamp log (`~/Library/Application Support/siesta/stamps.jsonl`) — no browser roundtrip:
 
 ```

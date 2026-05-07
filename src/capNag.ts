@@ -1,11 +1,13 @@
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { openSession } from './browser.js';
 import type { Config } from './config.js';
 import { readLastStamp } from './lastStamp.js';
 import { log } from './log.js';
 import { notify } from './notify.js';
 import { capNagLogPath, capNagPidPath } from './paths.js';
+import { readStatus } from './stamp.js';
 import { MAX_WORK_MS, formatDuration, summarizeToday } from './workLog.js';
 
 const WARN_15_MS = 15 * 60_000;
@@ -97,10 +99,22 @@ export async function runCapNagLoop(config: Config): Promise<void> {
   let warnedAt5 = false;
   let warnedAtCap = false;
 
+  const verifyAndNotify = async (title: string, body: string): Promise<boolean> => {
+    const stillAnwesend = await checkServerAnwesend(config);
+    if (stillAnwesend === false) {
+      log.info('siesta: cap-nag verified abwesend on server — exiting');
+      cleanup('flipped to abwesend (server)');
+      return false;
+    }
+    // null = check failed; we still notify rather than swallow the warning.
+    notify(title, body, config.nag.sound);
+    return true;
+  };
+
   while (!stopped) {
     const last = readLastStamp();
     if (!last || last.presence !== 'anwesend') {
-      log.info('siesta: cap-nag detected user is no longer anwesend — exiting');
+      log.info('siesta: cap-nag detected user is no longer anwesend (local) — exiting');
       cleanup('flipped to abwesend');
       return;
     }
@@ -108,26 +122,26 @@ export async function runCapNagLoop(config: Config): Promise<void> {
     const remaining = MAX_WORK_MS - summarizeToday().totalMs;
 
     if (remaining <= 0) {
-      if (!warnedAtCap) {
-        notify('siesta — Tagescap erreicht', 'Du hast 10h 15min voll. Bitte ausstempeln.', config.nag.sound);
-        warnedAtCap = true;
-      } else {
-        const overMin = Math.floor(-remaining / 60_000);
-        notify('siesta — über Cap', `${overMin}min über 10h 15min. Bitte ausstempeln.`, config.nag.sound);
-      }
+      const ok = warnedAtCap
+        ? await verifyAndNotify('siesta — über Cap', `${Math.floor(-remaining / 60_000)}min über 10h 15min. Bitte ausstempeln.`)
+        : await verifyAndNotify('siesta — Tagescap erreicht', 'Du hast 10h 15min voll. Bitte ausstempeln.');
+      if (!ok) return;
+      warnedAtCap = true;
       await sleep(POST_CAP_REPEAT_MS);
       continue;
     }
 
     if (remaining <= WARN_5_MS && !warnedAt5) {
-      notify('siesta — gleich am Cap', `Noch ${Math.ceil(remaining / 60_000)}min bis 10h 15min.`, config.nag.sound);
+      const ok = await verifyAndNotify('siesta — gleich am Cap', `Noch ${Math.ceil(remaining / 60_000)}min bis 10h 15min.`);
+      if (!ok) return;
       warnedAt5 = true;
       await sleep(boundedSleep(remaining));
       continue;
     }
 
     if (remaining <= WARN_15_MS && !warnedAt15) {
-      notify('siesta — bald am Cap', `Noch ${Math.ceil(remaining / 60_000)}min bis 10h 15min.`, config.nag.sound);
+      const ok = await verifyAndNotify('siesta — bald am Cap', `Noch ${Math.ceil(remaining / 60_000)}min bis 10h 15min.`);
+      if (!ok) return;
       warnedAt15 = true;
       await sleep(boundedSleep(remaining - WARN_5_MS));
       continue;
@@ -137,6 +151,28 @@ export async function runCapNagLoop(config: Config): Promise<void> {
     // a user clocking out via the intranet UI is detected within MAX_SLEEP_MS.
     const untilWarn15 = remaining - WARN_15_MS;
     await sleep(boundedSleep(untilWarn15));
+  }
+}
+
+/**
+ * Returns true if anwesend, false if abwesend, null on read failure.
+ * Side effect: readStatus reconciles local state from the server.
+ */
+async function checkServerAnwesend(config: Config): Promise<boolean | null> {
+  try {
+    const session = await openSession(config, { headed: false });
+    try {
+      const s = await readStatus(session.page, config);
+      await session.saveState();
+      if (s === 'anwesend') return true;
+      if (s === 'abwesend') return false;
+      return null;
+    } finally {
+      await session.close();
+    }
+  } catch (e) {
+    log.warn({ err: e instanceof Error ? e.message : String(e) }, 'siesta: cap-nag server check failed');
+    return null;
   }
 }
 

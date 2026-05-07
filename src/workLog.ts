@@ -1,9 +1,23 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, unlinkSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { readLastStamp, writeLastStamp } from './lastStamp.js';
 import { stampLogPath } from './paths.js';
 import type { Presence } from './stamp.js';
 
 export const MAX_WORK_MS = (10 * 60 + 15) * 60_000;
+
+/**
+ * Bring local state (last-stamp + stamps.jsonl) in sync with what the server reports.
+ * Returns true if a synthetic event was written (i.e. a UI-side change was detected).
+ */
+export function reconcileFromServer(observed: Presence | 'unknown', ts = Date.now()): boolean {
+  if (observed === 'unknown') return false;
+  const last = readLastStamp();
+  if (last && last.presence === observed) return false;
+  appendStamp(observed, ts);
+  writeLastStamp({ presence: observed, ts });
+  return true;
+}
 
 interface StampEvent {
   ts: number;

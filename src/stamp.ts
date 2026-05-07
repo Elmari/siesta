@@ -2,6 +2,7 @@ import type { Page } from 'playwright';
 import type { Config } from './config.js';
 import { getPassword } from './credentials.js';
 import { log } from './log.js';
+import { reconcileFromServer } from './workLog.js';
 
 export type Presence = 'anwesend' | 'abwesend';
 
@@ -14,7 +15,11 @@ export interface StampResult {
 export async function readStatus(page: Page, config: Config): Promise<Presence | 'unknown'> {
   await ensureOnPresencePage(page, config);
   const text = (await page.locator('#status').first().textContent({ timeout: config.timeout_ms })) ?? '';
-  return parsePresence(text);
+  const observed = parsePresence(text);
+  if (reconcileFromServer(observed)) {
+    log.info(`siesta: reconciled local state from server — observed '${observed}'`);
+  }
+  return observed;
 }
 
 export async function stamp(
@@ -27,6 +32,9 @@ export async function stamp(
 
   const beforeText = (await page.locator('#status').first().textContent({ timeout: config.timeout_ms })) ?? '';
   const before = parsePresence(beforeText);
+  if (reconcileFromServer(before)) {
+    log.info(`siesta: reconciled local state from server — observed '${before}' before stamp`);
+  }
 
   if (before === target) {
     log.info(`siesta: already ${target}; nothing to do`);

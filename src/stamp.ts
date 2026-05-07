@@ -50,18 +50,41 @@ async function ensureOnPresencePage(page: Page, config: Config): Promise<void> {
   if (!page.url().startsWith(config.presence_url.split('?')[0])) {
     log.debug(`siesta: navigating to ${config.presence_url}`);
     await page.goto(config.presence_url, { waitUntil: 'domcontentloaded' });
+    log.debug(`siesta: after goto, page.url() = ${page.url()}`);
   }
-  if (await isOnLoginPage(page, config)) {
+
+  let phase = await waitForLoginOrStatus(page, config);
+  log.debug(`siesta: initial wait resolved as '${phase}' (url=${page.url()})`);
+
+  if (phase === 'login') {
     await performLogin(page, config);
+    phase = await waitForLoginOrStatus(page, config);
+    log.debug(`siesta: post-login wait resolved as '${phase}' (url=${page.url()})`);
+    if (phase === 'login') {
+      throw new Error(
+        'Login schlug fehl — Loginseite immer noch sichtbar. Passwort falsch (siesta login) oder Selektoren auf der Anmeldeseite geändert?',
+      );
+    }
   }
-  await page.waitForSelector('#status', { timeout: config.timeout_ms });
 }
 
-async function isOnLoginPage(page: Page, config: Config): Promise<boolean> {
-  const url = page.url();
-  if (url.startsWith(config.login_url)) return true;
-  return (await page.locator('input[name="username"]').count()) > 0
-    && (await page.locator('input[name="password"]').count()) > 0;
+async function waitForLoginOrStatus(page: Page, config: Config): Promise<'status' | 'login'> {
+  const status = page
+    .locator('#status')
+    .first()
+    .waitFor({ state: 'visible', timeout: config.timeout_ms })
+    .then(() => 'status' as const);
+  const login = page
+    .locator('input[name="username"]')
+    .first()
+    .waitFor({ state: 'visible', timeout: config.timeout_ms })
+    .then(() => 'login' as const);
+
+  // Swallow the loser's rejection so a slow timeout doesn't surface as unhandled.
+  status.catch(() => {});
+  login.catch(() => {});
+
+  return Promise.race([status, login]);
 }
 
 async function performLogin(page: Page, config: Config): Promise<void> {
@@ -76,13 +99,6 @@ async function performLogin(page: Page, config: Config): Promise<void> {
   await page.locator('input[name="username"]').fill(config.username);
   await page.locator('input[name="password"]').fill(password);
   await page.locator('#login-button').click();
-
-  await page.waitForURL((url) => !url.toString().startsWith(config.login_url), {
-    timeout: config.timeout_ms,
-  });
-  if (!page.url().startsWith(config.presence_url.split('?')[0])) {
-    await page.goto(config.presence_url, { waitUntil: 'domcontentloaded' });
-  }
 }
 
 function parsePresence(text: string): Presence | 'unknown' {

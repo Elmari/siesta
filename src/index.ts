@@ -109,7 +109,13 @@ function parseStampOpts(argv: string[]): StampOpts {
 }
 
 async function runStamp(target: Presence, opts: StampOpts, invokedAs: string): Promise<void> {
-  if (!opts.dryRun) assertWriteAllowed(target);
+  if (!opts.dryRun) {
+    const blocked = checkWriteAllowed(target);
+    if (blocked) {
+      console.log(blocked);
+      return;
+    }
+  }
 
   const { config } = loadConfig();
   const session = await openSession(config, { headed: opts.headed });
@@ -155,13 +161,11 @@ async function runStamp(target: Presence, opts: StampOpts, invokedAs: string): P
   }
 }
 
-function assertWriteAllowed(target: Presence): void {
+function checkWriteAllowed(target: Presence): string | null {
   const now = new Date();
   const h = now.getHours();
   if (h < STAMP_HOUR_MIN || h >= STAMP_HOUR_MAX_EXCLUSIVE) {
-    throw new Error(
-      `Stempeln ist zwischen ${STAMP_HOUR_MAX_EXCLUSIVE}:00 und ${STAMP_HOUR_MIN}:00 gesperrt (aktuell ${pad2(h)}:${pad2(now.getMinutes())}).`,
-    );
+    return `⏰ Stempeln ist zwischen ${STAMP_HOUR_MAX_EXCLUSIVE}:00 und ${STAMP_HOUR_MIN}:00 gesperrt (aktuell ${pad2(h)}:${pad2(now.getMinutes())}).`;
   }
 
   if (target === 'anwesend') {
@@ -170,12 +174,12 @@ function assertWriteAllowed(target: Presence): void {
       const elapsed = Date.now() - last.ts;
       if (elapsed < MIN_ABSENCE_MS) {
         const remaining = Math.ceil((MIN_ABSENCE_MS - elapsed) / 1000);
-        throw new Error(
-          `Abwesenheit war erst vor ${Math.floor(elapsed / 1000)}s — Pausen müssen mindestens 1 Minute dauern. Warte noch ${remaining}s.`,
-        );
+        return `⏳ Abwesenheit war erst vor ${Math.floor(elapsed / 1000)}s — Pausen müssen mindestens 1 Minute dauern. Warte noch ${remaining}s.`;
       }
     }
   }
+
+  return null;
 }
 
 function pad2(n: number): string {

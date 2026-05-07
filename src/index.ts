@@ -10,7 +10,7 @@ import { readStatus, stamp, type Presence, type StampResult } from './stamp.js';
 import { readNagPid, runNagLoop, startNag, stopNag } from './nag.js';
 import { runCapNagLoop, startCapNag, stopCapNag } from './capNag.js';
 import { clearLastStamp, readLastStamp, writeLastStamp } from './lastStamp.js';
-import { MAX_WORK_MS, appendStamp, clearStampLog, formatDuration, formatHm, summarizeToday } from './workLog.js';
+import { MAX_WORK_MS, appendStamp, clearStampLog, formatDuration, formatHm, summarizeToday, type WorkSummary } from './workLog.js';
 import { log } from './log.js';
 
 const MIN_ABSENCE_MS = 60_000;
@@ -76,6 +76,11 @@ async function main(): Promise<void> {
     .command('logout')
     .description('remove the stored password and clear the browser session')
     .action(async () => runLogout());
+
+  program
+    .command('worked')
+    .description('show how much you have worked today (offline — no browser roundtrip)')
+    .action(() => runWorked());
 
   program
     .command('nag')
@@ -233,10 +238,20 @@ async function runStatus(opts: { headed?: boolean }): Promise<void> {
   } finally {
     await session.close();
   }
+  printPresenceWithSummary(status, summarizeToday());
+}
 
+function runWorked(): void {
   const summary = summarizeToday();
+  const presence: Presence | 'unknown' = summary.firstTs === null
+    ? 'unknown'
+    : summary.openSinceTs !== null ? 'anwesend' : 'abwesend';
+  printPresenceWithSummary(presence, summary);
+}
+
+function printPresenceWithSummary(presence: Presence | 'unknown', summary: WorkSummary): void {
   if (summary.firstTs === null) {
-    console.log(formatPresence(status));
+    console.log(formatPresence(presence));
     console.log('Heute noch nicht gestempelt.');
     return;
   }
@@ -247,11 +262,11 @@ async function runStatus(opts: { headed?: boolean }): Promise<void> {
 
   if (summary.openSinceTs !== null) {
     const since = formatHm(summary.openSinceTs);
-    console.log(`${formatPresence(status)} seit ${since}`);
+    console.log(`${formatPresence(presence)} seit ${since}`);
     console.log(`Heute gearbeitet: ${total} (${summary.pairs > 0 ? `${summary.pairs} Pause${summary.pairs === 1 ? '' : 'n'} davor, ` : ''}noch ${remainingStr} bis 10h 15min)`);
   } else {
     const lastOut = summary.lastAbwesendTs !== null ? ` (zuletzt abgemeldet ${formatHm(summary.lastAbwesendTs)})` : '';
-    console.log(`${formatPresence(status)}${lastOut}`);
+    console.log(`${formatPresence(presence)}${lastOut}`);
     console.log(`Heute gearbeitet: ${total} (noch ${remainingStr} bis 10h 15min)`);
   }
 }

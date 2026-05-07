@@ -28,6 +28,7 @@ mahlzeit       # clock out for lunch (kicks off the lunch reminder)
 moin           # back from lunch
 ciao           # end of day
 siesta status  # what am I right now + how long have I worked today?
+siesta worked  # same minus the server roundtrip (offline, instant)
 ```
 
 | Alias | Equivalent | Action |
@@ -47,16 +48,16 @@ Flags on stamp commands:
 
 All hard, no override flag:
 
-- **No stamping 21:00–06:00.** Writes only; `status` always works.
+- **No stamping 21:00–06:00.** Writes only; `status` and `worked` always work.
 - **No re-clocking in within 60 s of clocking out.** Catches accidental double-clicks and too-short breaks.
 - **No `moin` once today's accumulated work time is ≥ 10h 15min.**
 - **Already in target state?** No-op with a friendly message — nothing sent to the server.
 
 When a guard fires you get a single line and a clean exit — no stack trace.
 
-## `siesta status`
+## `siesta status` vs. `siesta worked`
 
-Goes to the server for the canonical presence, reconciles local state if it disagreed, and prints today's totals from the local stamp log:
+Both print the same two-line summary:
 
 ```
 ✅ anwesend seit 09:42
@@ -67,6 +68,11 @@ Heute gearbeitet: 4h 18min (1 Pause davor, noch 5h 57min bis 10h 15min)
 🌙 abwesend (zuletzt abgemeldet 12:14)
 Heute gearbeitet: 3h 12min (noch 7h 3min bis 10h 15min)
 ```
+
+The difference is where the presence comes from:
+
+- `siesta status` opens a session, reads the canonical server state, and reconciles `last-stamp.json` if it disagreed. Use this when you stamped via the UI and want the local log to catch up.
+- `siesta worked` skips the browser entirely, infers presence from the local stamp log, and returns instantly. Use this for the dozen times a day you just want to know "how much have I worked".
 
 ## Background nags
 
@@ -128,7 +134,7 @@ All under `~/Library/Application Support/siesta/`:
 |---|---|
 | `state.json` | Playwright cookies — keeps you logged in. |
 | `last-stamp.json` | Latest presence + timestamp; drives the 60-s break check and the cap-nag's cheap path. |
-| `stamps.jsonl` | Append-only log of stamp events; drives the `siesta status` work-time summary. |
+| `stamps.jsonl` | Append-only log of stamp events; drives `siesta worked` and the `status` work-time summary. |
 | `nag.{pid,log}` / `cap-nag.{pid,log}` | Per-nag pid file + log. |
 
 `siesta logout` clears the Keychain entry, `state.json`, `last-stamp.json`, and `stamps.jsonl`. The pid/log files stay.

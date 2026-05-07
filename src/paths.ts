@@ -28,3 +28,11 @@ export function nagPidPath(): string {
 export function nagLogPath(): string {
   return join(appSupport(), 'nag.log');
 }
+
+export function capNagPidPath(): string {
+  return join(appSupport(), 'cap-nag.pid');
+}
+
+export function capNagLogPath(): string {
+  return join(appSupport(), 'cap-nag.log');
+}

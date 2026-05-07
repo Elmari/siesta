@@ -8,14 +8,14 @@ import { deletePassword, getPassword, setPassword } from './credentials.js';
 import { clearState, openSession } from './browser.js';
 import { readStatus, stamp, type Presence, type StampResult } from './stamp.js';
 import { readNagPid, runNagLoop, startNag, stopNag } from './nag.js';
+import { runCapNagLoop, startCapNag, stopCapNag } from './capNag.js';
 import { clearLastStamp, readLastStamp, writeLastStamp } from './lastStamp.js';
-import { appendStamp, clearStampLog, formatDuration, formatHm, summarizeToday } from './workLog.js';
+import { MAX_WORK_MS, appendStamp, clearStampLog, formatDuration, formatHm, summarizeToday } from './workLog.js';
 import { log } from './log.js';
 
 const MIN_ABSENCE_MS = 60_000;
 const STAMP_HOUR_MIN = 6;
 const STAMP_HOUR_MAX_EXCLUSIVE = 21;
-const MAX_WORK_MS = (10 * 60 + 15) * 60_000;
 
 const ALIAS_TO_TARGET: Record<string, Presence> = {
   moin: 'anwesend',
@@ -26,10 +26,15 @@ const ALIAS_TO_TARGET: Record<string, Presence> = {
 async function main(): Promise<void> {
   const invokedAs = basename(process.argv[1] ?? '').replace(/\.[^.]+$/, '');
 
-  // Detached child entry — kept hidden from user-facing CLI
+  // Detached child entries — kept hidden from user-facing CLI
   if (process.argv[2] === '__nag-loop' && process.env.SIESTA_NAG_CHILD === '1') {
     const { config } = loadConfig();
     await runNagLoop(config);
+    return;
+  }
+  if (process.argv[2] === '__cap-nag-loop' && process.env.SIESTA_CAP_NAG_CHILD === '1') {
+    const { config } = loadConfig();
+    await runCapNagLoop(config);
     return;
   }
 
@@ -154,21 +159,28 @@ async function runStamp(target: Presence, opts: StampOpts, invokedAs: string): P
 
   if (opts.dryRun) return;
 
-  // Stamp-in always cancels any running nag.
   if (target === 'anwesend') {
     const stopped = stopNag();
-    if (stopped.stopped) console.log('  (Nag-Loop gestoppt)');
+    if (stopped.stopped) console.log('  (Mittag-Nag-Loop gestoppt)');
+    if (config.nag.enabled) {
+      const { started, pid } = startCapNag();
+      if (started) console.log(`  (Cap-Nag aktiv, pid ${pid} — meldet sich 15min vor 10h 15min)`);
+    }
+  } else {
+    // Going abwesend — stop the cap-nag (lunch-nag will handle abwesend itself if started).
+    const stoppedCap = stopCapNag();
+    if (stoppedCap.stopped) console.log('  (Cap-Nag gestoppt)');
   }
 
-  // Auto-start nag after `mahlzeit` (and `siesta out --nag`).
+  // Auto-start lunch nag after `mahlzeit` (and `siesta out --nag`).
   if (target === 'abwesend' && invokedAs === 'mahlzeit' && config.nag.enabled) {
     const { started, pid } = startNag();
     if (started) {
       console.log(
-        `  (Nag-Loop läuft im Hintergrund, pid ${pid} — erste Erinnerung in ${config.nag.delay_minutes} min, danach alle ${config.nag.interval_minutes} min)`,
+        `  (Mittag-Nag läuft im Hintergrund, pid ${pid} — erste Erinnerung in ${config.nag.delay_minutes} min, danach alle ${config.nag.interval_minutes} min)`,
       );
     } else {
-      console.log(`  (Nag-Loop lief schon, pid ${pid})`);
+      console.log(`  (Mittag-Nag lief schon, pid ${pid})`);
     }
   }
 }
@@ -284,6 +296,7 @@ async function runLogin(): Promise<void> {
 async function runLogout(): Promise<void> {
   const { config } = loadConfig();
   stopNag();
+  stopCapNag();
   const removed = await deletePassword(config.username);
   await clearState();
   clearLastStamp();

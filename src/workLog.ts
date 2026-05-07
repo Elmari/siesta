@@ -3,6 +3,8 @@ import { dirname } from 'node:path';
 import { stampLogPath } from './paths.js';
 import type { Presence } from './stamp.js';
 
+export const MAX_WORK_MS = (10 * 60 + 15) * 60_000;
+
 interface StampEvent {
   ts: number;
   presence: Presence;

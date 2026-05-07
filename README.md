@@ -48,6 +48,8 @@ Stamping is locked between **21:00 and 06:00** (no late-night accidents) and ref
 
 Pass `--dry-run` (e.g. `moin --dry-run`) to walk through login + selector resolution without actually clicking — handy after upstream UI changes.
 
+When you stamp in (`moin`), siesta also forks a **cap-nag** in the background that fires a notification 15 min and 5 min before the 10h 15min mark, then again at the cap and every 5 min after — until you stamp out (or the local last-stamp says you're abwesend). Logs go to `~/Library/Application Support/siesta/cap-nag.log`. Stamping out kills it; `siesta logout` does too.
+
 `siesta worked` shows how long you have worked today, derived from the local stamp log (`~/Library/Application Support/siesta/stamps.jsonl`) — no browser roundtrip:
 
 ```

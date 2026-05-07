@@ -27,8 +27,7 @@ moin           # clock in
 mahlzeit       # clock out for lunch (kicks off the lunch reminder)
 moin           # back from lunch
 ciao           # end of day
-siesta status  # what am I right now?
-siesta worked  # how long have I worked today?
+siesta status  # what am I right now + how long have I worked today?
 ```
 
 | Alias | Equivalent | Action |
@@ -48,16 +47,16 @@ Flags on stamp commands:
 
 All hard, no override flag:
 
-- **No stamping 21:00–06:00.** Writes only; `status` and `worked` always work.
+- **No stamping 21:00–06:00.** Writes only; `status` always works.
 - **No re-clocking in within 60 s of clocking out.** Catches accidental double-clicks and too-short breaks.
 - **No `moin` once today's accumulated work time is ≥ 10h 15min.**
 - **Already in target state?** No-op with a friendly message — nothing sent to the server.
 
 When a guard fires you get a single line and a clean exit — no stack trace.
 
-## `siesta worked`
+## `siesta status`
 
-Reads the local stamp log and prints today's totals. Offline, no browser:
+Goes to the server for the canonical presence, reconciles local state if it disagreed, and prints today's totals from the local stamp log:
 
 ```
 ✅ anwesend seit 09:42
@@ -68,8 +67,6 @@ Heute gearbeitet: 4h 18min (1 Pause davor, noch 5h 57min bis 10h 15min)
 🌙 abwesend (zuletzt abgemeldet 12:14)
 Heute gearbeitet: 3h 12min (noch 7h 3min bis 10h 15min)
 ```
-
-`siesta status` is the same idea but goes to the server for the canonical presence.
 
 ## Background nags
 
@@ -131,7 +128,7 @@ All under `~/Library/Application Support/siesta/`:
 |---|---|
 | `state.json` | Playwright cookies — keeps you logged in. |
 | `last-stamp.json` | Latest presence + timestamp; drives the 60-s break check and the cap-nag's cheap path. |
-| `stamps.jsonl` | Append-only log of stamp events; drives `siesta worked`. |
+| `stamps.jsonl` | Append-only log of stamp events; drives the `siesta status` work-time summary. |
 | `nag.{pid,log}` / `cap-nag.{pid,log}` | Per-nag pid file + log. |
 
 `siesta logout` clears the Keychain entry, `state.json`, `last-stamp.json`, and `stamps.jsonl`. The pid/log files stay.

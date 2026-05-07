@@ -78,11 +78,6 @@ async function main(): Promise<void> {
     .action(async () => runLogout());
 
   program
-    .command('worked')
-    .description('show how much you have worked today (offline — no browser roundtrip)')
-    .action(() => runWorked());
-
-  program
     .command('nag')
     .description('manually start (or stop) the lunch-nag loop')
     .option('--stop', 'stop a running nag loop')
@@ -228,9 +223,20 @@ function formatPresence(p: Presence | 'unknown'): string {
   }
 }
 
-function runWorked(): void {
+async function runStatus(opts: { headed?: boolean }): Promise<void> {
+  const { config } = loadConfig();
+  const session = await openSession(config, { headed: opts.headed });
+  let status: Presence | 'unknown';
+  try {
+    status = await readStatus(session.page, config);
+    await session.saveState();
+  } finally {
+    await session.close();
+  }
+
   const summary = summarizeToday();
   if (summary.firstTs === null) {
+    console.log(formatPresence(status));
     console.log('Heute noch nicht gestempelt.');
     return;
   }
@@ -241,24 +247,12 @@ function runWorked(): void {
 
   if (summary.openSinceTs !== null) {
     const since = formatHm(summary.openSinceTs);
-    console.log(`✅ anwesend seit ${since}`);
+    console.log(`${formatPresence(status)} seit ${since}`);
     console.log(`Heute gearbeitet: ${total} (${summary.pairs > 0 ? `${summary.pairs} Pause${summary.pairs === 1 ? '' : 'n'} davor, ` : ''}noch ${remainingStr} bis 10h 15min)`);
   } else {
     const lastOut = summary.lastAbwesendTs !== null ? ` (zuletzt abgemeldet ${formatHm(summary.lastAbwesendTs)})` : '';
-    console.log(`🌙 abwesend${lastOut}`);
+    console.log(`${formatPresence(status)}${lastOut}`);
     console.log(`Heute gearbeitet: ${total} (noch ${remainingStr} bis 10h 15min)`);
-  }
-}
-
-async function runStatus(opts: { headed?: boolean }): Promise<void> {
-  const { config } = loadConfig();
-  const session = await openSession(config, { headed: opts.headed });
-  try {
-    const status = await readStatus(session.page, config);
-    await session.saveState();
-    console.log(formatPresence(status));
-  } finally {
-    await session.close();
   }
 }
 

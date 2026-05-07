@@ -13,6 +13,10 @@ export function statePath(): string {
   return join(appSupport(), 'state.json');
 }
 
+export function lastStampPath(): string {
+  return join(appSupport(), 'last-stamp.json');
+}
+
 export function nagPidPath(): string {
   return join(appSupport(), 'nag.pid');
 }

@@ -17,7 +17,12 @@ export async function readStatus(page: Page, config: Config): Promise<Presence |
   return parsePresence(text);
 }
 
-export async function stamp(page: Page, config: Config, target: Presence): Promise<StampResult> {
+export async function stamp(
+  page: Page,
+  config: Config,
+  target: Presence,
+  opts: { dryRun?: boolean } = {},
+): Promise<StampResult> {
   await ensureOnPresencePage(page, config);
 
   const beforeText = (await page.locator('#status').first().textContent({ timeout: config.timeout_ms })) ?? '';
@@ -29,6 +34,15 @@ export async function stamp(page: Page, config: Config, target: Presence): Promi
   }
 
   const buttonName = target === 'anwesend' ? 'btnPresent' : 'btnAbsent';
+
+  if (opts.dryRun) {
+    // Dry-run: ensure the button is actually attached/visible so we'd know if a selector broke,
+    // but don't click it.
+    await page.locator(`[name="${buttonName}"]`).first().waitFor({ state: 'visible', timeout: config.timeout_ms });
+    log.info(`siesta: [dry-run] would click [name="${buttonName}"] — skipping`);
+    return { before, after: before, changed: false };
+  }
+
   log.debug(`siesta: clicking [name="${buttonName}"]`);
   await page.locator(`[name="${buttonName}"]`).first().click();
 

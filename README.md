@@ -42,7 +42,11 @@ All four commands are equivalent to:
 | `ciao` | `siesta out` | clock out (abwesend) |
 | `mahlzeit` | `siesta out --nag` | clock out (abwesend) — Mittag-flavoured, starts nag loop |
 
-Double-stamp guard is built in: if you're already `anwesend` and run `moin`, it noops with a friendly message. Pass `--force` to click anyway.
+Double-stamp guard is built in: if you're already `anwesend` and run `moin`, it noops with a friendly message.
+
+Stamping is locked between **21:00 and 06:00** (no late-night accidents) and refuses to flip you back to `anwesend` if you went `abwesend` less than a minute ago (catches accidental double-stamps and breaks shorter than the configured minimum).
+
+Pass `--dry-run` (e.g. `moin --dry-run`) to walk through login + selector resolution without actually clicking — handy after upstream UI changes.
 
 ## Lunch nag
 

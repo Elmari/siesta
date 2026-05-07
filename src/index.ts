@@ -8,7 +8,12 @@ import { deletePassword, getPassword, setPassword } from './credentials.js';
 import { clearState, openSession } from './browser.js';
 import { readStatus, stamp, type Presence, type StampResult } from './stamp.js';
 import { readNagPid, runNagLoop, startNag, stopNag } from './nag.js';
+import { clearLastStamp, readLastStamp, writeLastStamp } from './lastStamp.js';
 import { log } from './log.js';
+
+const MIN_ABSENCE_MS = 60_000;
+const STAMP_HOUR_MIN = 6;
+const STAMP_HOUR_MAX_EXCLUSIVE = 21;
 
 const ALIAS_TO_TARGET: Record<string, Presence> = {
   moin: 'anwesend',
@@ -38,14 +43,14 @@ async function main(): Promise<void> {
     .command('in')
     .description('clock in (anwesend)')
     .option('--headed', 'show the browser window (debugging)')
-    .option('--force', 'click even if already in the target state')
+    .option('--dry-run', 'go through login + selectors but skip the actual click')
     .action(async (opts) => runStamp('anwesend', opts, 'in'));
 
   program
     .command('out')
     .description('clock out (abwesend)')
     .option('--headed', 'show the browser window')
-    .option('--force', 'click even if already in the target state')
+    .option('--dry-run', 'go through login + selectors but skip the actual click')
     .option('--nag', 'start lunch-nag loop after stamping out')
     .action(async (opts) => runStamp('abwesend', opts, opts.nag ? 'mahlzeit' : 'out'));
 
@@ -93,37 +98,43 @@ async function main(): Promise<void> {
 
 interface StampOpts {
   headed?: boolean;
-  force?: boolean;
+  dryRun?: boolean;
 }
 
 function parseStampOpts(argv: string[]): StampOpts {
-  return { headed: argv.includes('--headed'), force: argv.includes('--force') };
+  return {
+    headed: argv.includes('--headed'),
+    dryRun: argv.includes('--dry-run'),
+  };
 }
 
 async function runStamp(target: Presence, opts: StampOpts, invokedAs: string): Promise<void> {
+  if (!opts.dryRun) assertWriteAllowed(target);
+
   const { config } = loadConfig();
   const session = await openSession(config, { headed: opts.headed });
   let result: StampResult;
   try {
-    if (opts.force) {
-      const before = await readStatus(session.page, config);
-      const buttonName = target === 'anwesend' ? 'btnPresent' : 'btnAbsent';
-      await session.page.locator(`[name="${buttonName}"]`).first().click();
-      const after = await readStatus(session.page, config);
-      result = { before, after, changed: before !== after };
-    } else {
-      result = await stamp(session.page, config, target);
-    }
+    result = await stamp(session.page, config, target, { dryRun: opts.dryRun });
     await session.saveState();
 
-    if (!result.changed) {
-      console.log(`Schon ${result.before}. Nichts zu tun.`);
+    if (opts.dryRun) {
+      if (!result.changed && result.before === target) {
+        console.log(`[dry-run] Schon ${formatPresence(result.before)}. Es würde nichts geklickt.`);
+      } else {
+        console.log(`[dry-run] Würde stempeln: ${formatPresence(result.before)} → ${formatPresence(target)} (kein Klick gemacht)`);
+      }
+    } else if (!result.changed) {
+      console.log(`Schon ${formatPresence(result.before)}. Nichts zu tun.`);
     } else {
-      console.log(`${result.before} → ${result.after} ✓`);
+      console.log(`${formatPresence(result.before)} → ${formatPresence(result.after)} ✓`);
+      writeLastStamp({ presence: result.after === 'unknown' ? target : result.after, ts: Date.now() });
     }
   } finally {
     await session.close();
   }
+
+  if (opts.dryRun) return;
 
   // Stamp-in always cancels any running nag.
   if (target === 'anwesend') {
@@ -144,13 +155,53 @@ async function runStamp(target: Presence, opts: StampOpts, invokedAs: string): P
   }
 }
 
+function assertWriteAllowed(target: Presence): void {
+  const now = new Date();
+  const h = now.getHours();
+  if (h < STAMP_HOUR_MIN || h >= STAMP_HOUR_MAX_EXCLUSIVE) {
+    throw new Error(
+      `Stempeln ist zwischen ${STAMP_HOUR_MAX_EXCLUSIVE}:00 und ${STAMP_HOUR_MIN}:00 gesperrt (aktuell ${pad2(h)}:${pad2(now.getMinutes())}).`,
+    );
+  }
+
+  if (target === 'anwesend') {
+    const last = readLastStamp();
+    if (last && last.presence === 'abwesend') {
+      const elapsed = Date.now() - last.ts;
+      if (elapsed < MIN_ABSENCE_MS) {
+        const remaining = Math.ceil((MIN_ABSENCE_MS - elapsed) / 1000);
+        throw new Error(
+          `Abwesenheit war erst vor ${Math.floor(elapsed / 1000)}s — Pausen müssen mindestens 1 Minute dauern. Warte noch ${remaining}s.`,
+        );
+      }
+    }
+  }
+}
+
+function pad2(n: number): string {
+  return n.toString().padStart(2, '0');
+}
+
+function formatPresence(p: Presence | 'unknown'): string {
+  const useColor = process.stdout.isTTY;
+  const wrap = (code: string, text: string) => (useColor ? `\x1b[${code}m${text}\x1b[0m` : text);
+  switch (p) {
+    case 'anwesend':
+      return wrap('32', `✅ anwesend`);
+    case 'abwesend':
+      return wrap('33', `🌙 abwesend`);
+    default:
+      return wrap('90', `❓ unknown`);
+  }
+}
+
 async function runStatus(opts: { headed?: boolean }): Promise<void> {
   const { config } = loadConfig();
   const session = await openSession(config, { headed: opts.headed });
   try {
     const status = await readStatus(session.page, config);
     await session.saveState();
-    console.log(status);
+    console.log(formatPresence(status));
   } finally {
     await session.close();
   }
@@ -192,6 +243,7 @@ async function runLogout(): Promise<void> {
   stopNag();
   const removed = await deletePassword(config.username);
   await clearState();
+  clearLastStamp();
   console.log(removed ? 'Password removed and session cleared.' : 'No password was stored. Session cleared.');
 }
 

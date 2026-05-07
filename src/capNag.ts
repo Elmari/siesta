@@ -94,6 +94,18 @@ export async function runCapNagLoop(config: Config): Promise<void> {
   };
   process.on('SIGTERM', () => cleanup('SIGTERM'));
   process.on('SIGINT', () => cleanup('SIGINT'));
+  process.on('uncaughtException', (err) => {
+    log.error(
+      { err: err instanceof Error ? err.stack ?? err.message : String(err) },
+      'siesta: cap-nag uncaughtException — staying alive',
+    );
+  });
+  process.on('unhandledRejection', (reason) => {
+    log.error(
+      { reason: reason instanceof Error ? reason.stack ?? reason.message : String(reason) },
+      'siesta: cap-nag unhandledRejection — staying alive',
+    );
+  });
 
   let warnedAt15 = false;
   let warnedAt5 = false;

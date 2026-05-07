@@ -97,6 +97,18 @@ export async function runNagLoop(config: Config): Promise<void> {
   };
   process.on('SIGTERM', () => cleanup('SIGTERM'));
   process.on('SIGINT', () => cleanup('SIGINT'));
+  process.on('uncaughtException', (err) => {
+    log.error(
+      { err: err instanceof Error ? err.stack ?? err.message : String(err) },
+      'siesta: nag uncaughtException — staying alive',
+    );
+  });
+  process.on('unhandledRejection', (reason) => {
+    log.error(
+      { reason: reason instanceof Error ? reason.stack ?? reason.message : String(reason) },
+      'siesta: nag unhandledRejection — staying alive',
+    );
+  });
 
   await sleep(delayMs);
 

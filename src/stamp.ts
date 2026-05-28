@@ -109,7 +109,7 @@ async function waitForLoginOrStatus(page: Page, config: Config): Promise<'status
   return Promise.race([status, login]);
 }
 
-async function performLogin(page: Page, config: Config): Promise<void> {
+export async function performLogin(page: Page, config: Config): Promise<void> {
   log.info('siesta: session expired — logging in');
   const password = await getPassword(config.username);
   if (!password) {

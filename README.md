@@ -25,10 +25,11 @@ siesta login                             # stores your password in Keychain
 ```bash
 moin           # clock in
 mahlzeit       # clock out for lunch (kicks off the lunch reminder)
-moin           # back from lunch
-ciao           # end of day
-siesta status  # what am I right now + how long have I worked today?
-siesta worked  # same minus the server roundtrip (offline, instant)
+moin            # back from lunch
+ciao            # end of day
+siesta status   # what am I right now + how long have I worked today?
+siesta worked   # same minus the server roundtrip (offline, instant)
+siesta overtime # current overtime balance from the ZeitDaten page
 ```
 
 | Alias | Equivalent | Action |

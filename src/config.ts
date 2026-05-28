@@ -21,6 +21,7 @@ const SelectorsSchema = z
     login_submit: z.string().default('#login-button'),
     btn_present: z.string().default('[name="btnPresent"]'),
     btn_absent: z.string().default('[name="btnAbsent"]'),
+    overtime: z.string().default('table[id="register"] tbody tr:first-child td:nth-child(7)'),
   })
   .default({
     status: '#status',
@@ -29,6 +30,7 @@ const SelectorsSchema = z
     login_submit: '#login-button',
     btn_present: '[name="btnPresent"]',
     btn_absent: '[name="btnAbsent"]',
+    overtime: 'table[id="register"] tbody tr:first-child td:nth-child(7)',
   });
 
 const ConfigSchema = z.object({
@@ -38,6 +40,10 @@ const ConfigSchema = z.object({
     .url()
     .default('https://your-intranet.example/presence'),
   login_url: z.string().url().default('https://your-intranet.example/login'),
+  overtime_url: z
+    .string()
+    .url()
+    .default('https://your-intranet.example/presence?actionName=ShowZeitDatenAction'),
   headless: z.boolean().default(true),
   timeout_ms: z.number().int().min(1000).max(120000).default(20000),
   selectors: SelectorsSchema,
@@ -73,6 +79,7 @@ username: your.username           # passwords live in macOS Keychain (run \`sies
 
 presence_url: https://your-intranet.example/presence
 login_url: https://your-intranet.example/login
+overtime_url: https://your-intranet.example/presence?actionName=ShowZeitDatenAction
 
 headless: true                    # flip to false (or pass --headed) when debugging
 timeout_ms: 20000
@@ -86,6 +93,7 @@ selectors:
   login_submit: '#login-button'
   btn_present: '[name="btnPresent"]'
   btn_absent: '[name="btnAbsent"]'
+  overtime: 'table[id="register"] tbody tr:first-child td:nth-child(7)'
 
 nag:                              # Mittagspausen-Erinnerung: nach \`mahlzeit\` startet ein Hintergrund-Loop
   enabled: true

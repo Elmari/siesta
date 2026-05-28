@@ -8,6 +8,7 @@ import { deletePassword, getPassword, setPassword } from './credentials.js';
 import { clearState, openSession } from './browser.js';
 import { readStatus, stamp, type Presence, type StampResult } from './stamp.js';
 import { readNagPid, runNagLoop, startNag, stopNag } from './nag.js';
+import { readOvertime } from './overtime.js';
 import { runCapNagLoop, startCapNag, stopCapNag } from './capNag.js';
 import { clearLastStamp, readLastStamp, writeLastStamp } from './lastStamp.js';
 import { MAX_WORK_MS, appendStamp, clearStampLog, formatDuration, formatHm, summarizeToday, type WorkSummary } from './workLog.js';
@@ -81,6 +82,12 @@ async function main(): Promise<void> {
     .command('worked')
     .description('show how much you have worked today (offline — no browser roundtrip)')
     .action(() => runWorked());
+
+  program
+    .command('overtime')
+    .description('show your current overtime balance (reads the ZeitDaten page)')
+    .option('--headed', 'show the browser window')
+    .action(async (opts) => runOvertime(opts));
 
   program
     .command('nag')
@@ -226,6 +233,27 @@ function formatPresence(p: Presence | 'unknown'): string {
     default:
       return wrap('90', `❓ unknown`);
   }
+}
+
+async function runOvertime(opts: { headed?: boolean }): Promise<void> {
+  const { config } = loadConfig();
+  const session = await openSession(config, { headed: opts.headed });
+  let value: string;
+  try {
+    value = await readOvertime(session.page, config);
+    await session.saveState();
+  } finally {
+    await session.close();
+  }
+  if (!value) {
+    console.log('Überstunden: (leer — Selektor traf eine Zelle ohne Text)');
+    return;
+  }
+  const useColor = process.stdout.isTTY;
+  const negative = value.trim().startsWith('-');
+  const code = negative ? '31' : '32';
+  const colored = useColor ? `\x1b[${code}m${value}\x1b[0m` : value;
+  console.log(`Überstunden: ${colored}`);
 }
 
 async function runStatus(opts: { headed?: boolean }): Promise<void> {

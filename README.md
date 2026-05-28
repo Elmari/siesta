@@ -23,13 +23,13 @@ siesta login                             # stores your password in Keychain
 ## Daily use
 
 ```bash
-moin           # clock in
-mahlzeit       # clock out for lunch (kicks off the lunch reminder)
-moin            # back from lunch
-ciao            # end of day
-siesta status   # what am I right now + how long have I worked today?
-siesta worked   # same minus the server roundtrip (offline, instant)
-siesta overtime # current overtime balance from the ZeitDaten page
+moin              # clock in
+mahlzeit          # clock out for lunch (kicks off the lunch reminder)
+moin              # back from lunch
+ciao              # end of day
+siesta status     # what am I right now + how long have I worked today?
+siesta worked     # same minus the server roundtrip (offline, instant)
+siesta overtime   # current overtime balance from the ZeitDaten page
 ```
 
 | Alias | Equivalent | Action |
@@ -74,6 +74,18 @@ The difference is where the presence comes from:
 
 - `siesta status` opens a session, reads the canonical server state, and reconciles `last-stamp.json` if it disagreed. Use this when you stamped via the UI and want the local log to catch up.
 - `siesta worked` skips the browser entirely, infers presence from the local stamp log, and returns instantly. Use this for the dozen times a day you just want to know "how much have I worked".
+
+## `siesta overtime`
+
+Opens a session, navigates to `overtime_url`, and prints the text of the cell matched by `selectors.overtime` (default: first row, 7th column of `table#register` on the ZeitDaten page). Negative balances are printed red, positive ones green.
+
+Existing configs need two new keys:
+
+```yaml
+overtime_url: https://your-intranet.example/presence?actionName=ShowZeitDatenAction
+selectors:
+  overtime: 'table[id="register"] tbody tr:first-child td:nth-child(7)'
+```
 
 ## Background nags
 

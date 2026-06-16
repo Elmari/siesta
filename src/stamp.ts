@@ -1,6 +1,6 @@
 import type { Page } from 'playwright';
 import type { Config } from './config.js';
-import { getPassword } from './credentials.js';
+import { ensureContentOrLogin } from './auth.js';
 import { log } from './log.js';
 import { reconcileFromServer } from './workLog.js';
 
@@ -69,58 +69,18 @@ export async function stamp(
 }
 
 async function ensureOnPresencePage(page: Page, config: Config): Promise<void> {
-  if (!page.url().startsWith(config.presence_url.split('?')[0])) {
-    log.debug(`siesta: navigating to ${config.presence_url}`);
-    await page.goto(config.presence_url, { waitUntil: 'domcontentloaded' });
-    log.debug(`siesta: after goto, page.url() = ${page.url()}`);
-  }
-
-  let phase = await waitForLoginOrStatus(page, config);
-  log.debug(`siesta: initial wait resolved as '${phase}' (url=${page.url()})`);
-
-  if (phase === 'login') {
-    await performLogin(page, config);
-    phase = await waitForLoginOrStatus(page, config);
-    log.debug(`siesta: post-login wait resolved as '${phase}' (url=${page.url()})`);
-    if (phase === 'login') {
-      throw new Error(
-        'Login schlug fehl — Loginseite immer noch sichtbar. Passwort falsch (siesta login) oder Selektoren auf der Anmeldeseite geändert?',
-      );
-    }
-  }
-}
-
-async function waitForLoginOrStatus(page: Page, config: Config): Promise<'status' | 'login'> {
-  const status = page
-    .locator(config.selectors.status)
-    .first()
-    .waitFor({ state: 'visible', timeout: config.timeout_ms })
-    .then(() => 'status' as const);
-  const login = page
-    .locator(config.selectors.login_username)
-    .first()
-    .waitFor({ state: 'visible', timeout: config.timeout_ms })
-    .then(() => 'login' as const);
-
-  // Swallow the loser's rejection so a slow timeout doesn't surface as unhandled.
-  status.catch(() => {});
-  login.catch(() => {});
-
-  return Promise.race([status, login]);
-}
-
-export async function performLogin(page: Page, config: Config): Promise<void> {
-  log.info('siesta: session expired — logging in');
-  const password = await getPassword(config.username);
-  if (!password) {
-    throw new Error(
-      `No password stored in macOS Keychain for "${config.username}". Run \`siesta login\` first.`,
-    );
-  }
-
-  await page.locator(config.selectors.login_username).fill(config.username);
-  await page.locator(config.selectors.login_password).fill(password);
-  await page.locator(config.selectors.login_submit).click();
+  await ensureContentOrLogin(
+    page,
+    config,
+    config.selectors.status,
+    () => {
+      log.debug(`siesta: navigating to ${config.presence_url}`);
+      return page.goto(config.presence_url, { waitUntil: 'domcontentloaded' }).then(() => {
+        log.debug(`siesta: after goto, page.url() = ${page.url()}`);
+      });
+    },
+    () => page.url().startsWith(config.presence_url.split('?')[0]),
+  );
 }
 
 function parsePresence(text: string): Presence | 'unknown' {

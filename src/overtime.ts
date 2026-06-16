@@ -1,7 +1,7 @@
 import type { Page } from 'playwright';
 import type { Config } from './config.js';
+import { ensureContentOrLogin } from './auth.js';
 import { log } from './log.js';
-import { performLogin } from './stamp.js';
 
 export async function readOvertime(page: Page, config: Config): Promise<string> {
   await ensureOnOvertimePage(page, config);
@@ -10,29 +10,18 @@ export async function readOvertime(page: Page, config: Config): Promise<string> 
 }
 
 async function ensureOnOvertimePage(page: Page, config: Config): Promise<void> {
-  if (!isOnOvertimeUrl(page.url(), config.overtime_url)) {
-    log.debug(`siesta: navigating to ${config.overtime_url}`);
-    await page.goto(config.overtime_url, { waitUntil: 'domcontentloaded' });
-  }
-
-  let phase = await waitForLoginOrTable(page, config);
-  log.debug(`siesta: initial overtime wait resolved as '${phase}' (url=${page.url()})`);
-
-  if (phase === 'login') {
-    await performLogin(page, config);
-    // Login often redirects back to the default presence action — force the ZeitDaten action again.
-    if (!isOnOvertimeUrl(page.url(), config.overtime_url)) {
-      log.debug(`siesta: post-login redirect to ${page.url()}, re-navigating to overtime`);
-      await page.goto(config.overtime_url, { waitUntil: 'domcontentloaded' });
-    }
-    phase = await waitForLoginOrTable(page, config);
-    log.debug(`siesta: post-login overtime wait resolved as '${phase}' (url=${page.url()})`);
-    if (phase === 'login') {
-      throw new Error(
-        'Login schlug fehl — Loginseite immer noch sichtbar. Passwort falsch (siesta login) oder Selektoren auf der Anmeldeseite geändert?',
-      );
-    }
-  }
+  // Login drops us on the default presence action, so navigate() forces the
+  // ZeitDaten action again on the first pass and after every login.
+  await ensureContentOrLogin(
+    page,
+    config,
+    config.selectors.overtime,
+    () => {
+      log.debug(`siesta: navigating to ${config.overtime_url}`);
+      return page.goto(config.overtime_url, { waitUntil: 'domcontentloaded' }).then(() => undefined);
+    },
+    () => isOnOvertimeUrl(page.url(), config.overtime_url),
+  );
 }
 
 function isOnOvertimeUrl(currentUrl: string, overtimeUrl: string): boolean {
@@ -43,22 +32,4 @@ function isOnOvertimeUrl(currentUrl: string, overtimeUrl: string): boolean {
   const match = /[?&]actionName=([^&]+)/.exec(query);
   if (!match) return true;
   return new RegExp(`[?&]actionName=${match[1]}(?:&|$)`).test(currentUrl);
-}
-
-async function waitForLoginOrTable(page: Page, config: Config): Promise<'table' | 'login'> {
-  const table = page
-    .locator(config.selectors.overtime)
-    .first()
-    .waitFor({ state: 'visible', timeout: config.timeout_ms })
-    .then(() => 'table' as const);
-  const login = page
-    .locator(config.selectors.login_username)
-    .first()
-    .waitFor({ state: 'visible', timeout: config.timeout_ms })
-    .then(() => 'login' as const);
-
-  table.catch(() => {});
-  login.catch(() => {});
-
-  return Promise.race([table, login]);
 }

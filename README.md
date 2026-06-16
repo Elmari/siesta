@@ -170,7 +170,7 @@ PWDEBUG=1 siesta in               # Playwright Inspector (step manually)
 moin --dry-run                    # full flow, no click
 ```
 
-Login selectors live in `performLogin` ([src/auth.ts](src/auth.ts)) — adjust if the upstream form changes.
+Login selectors live in `performLogin` ([src/stamp.ts](src/stamp.ts)) — adjust if the upstream form changes.
 
 ### Credentials
 
